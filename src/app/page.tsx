@@ -85,17 +85,18 @@ function useAudioPlayer(src: string): UseAudioPlayerReturn {
 }
 
 interface UseConfettiCannonReturn {
-    fire: () => void;
-    burst: () => void;
-    cannonRef: React.RefObject<HTMLDivElement>; // Ref type for div
+  fire: () => void;
+  burst: () => void;
+  cannonRef: React.RefObject<HTMLDivElement | null>;
 }
 
+
 function useConfettiCannon(colors: string[]): UseConfettiCannonReturn {
-  const animationFrameRef = useRef<number | null>(null); // Store animation frame ID
-  const cannonRef = useRef<HTMLDivElement>(null); // Correct type for div ref
+  const animationFrameRef = useRef<number | null>(null);
+  const cannonRef = useRef<HTMLDivElement>(null);
 
   const fire = useCallback(() => {
-    if (animationFrameRef.current) return; // Prevent multiple concurrent animations
+    if (animationFrameRef.current) return;
 
     const frame = () => {
         const node = cannonRef.current;
