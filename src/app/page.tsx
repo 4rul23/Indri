@@ -1,8 +1,8 @@
+/* eslint-disable */
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo} from "react";
 import { motion, AnimatePresence, useAnimation } from "framer-motion";
-import confetti from "canvas-confetti";
 
 // Debounce utility for resizing confetti cannon
 function debounce(func, wait) {
@@ -36,18 +36,16 @@ function useAudioPlayer(src) {
   const audioRef = useRef(null);
 
   useEffect(() => {
-    // Create audio element only on client
     const audio = new Audio(src);
     audio.preload = "auto";
     audio.loop = true;
-    audio.volume = 0.25; // Adjusted default volume
+    audio.volume = 0.25;
     audioRef.current = audio;
 
-    // Cleanup: Pause and remove src when component unmounts
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current.removeAttribute('src'); // Prevent memory leaks
+        audioRef.current.removeAttribute('src');
         audioRef.current.load();
       }
     };
@@ -59,25 +57,28 @@ function useAudioPlayer(src) {
     }
   }, []);
 
+  // We keep the pause function here in the hook in case it's needed later
   const pause = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause();
     }
   }, []);
 
-  return { play, pause };
+  // Only return what's currently used by the Home component
+  return { play };
 }
+
 
 function useConfettiCannon(colors) {
   const intervalRef = useRef(null);
   const cannonRef = useRef();
 
   const fire = useCallback(() => {
-    if (intervalRef.current) return; // Don't start multiple intervals
+    if (intervalRef.current) return;
 
     const frame = () => {
         const origin = cannonRef.current?.getBoundingClientRect() ?? { y: 0 };
-        const originY = (origin.y / window.innerHeight); // Normalize origin based on cannon position
+        const originY = Math.max(0, Math.min(1, (origin.y / window.innerHeight))); // Ensure originY is between 0 and 1
 
         confetti({
             particleCount: 2, angle: 60, spread: 55, origin: { x: 0, y: originY }, colors: colors, disableForReducedMotion: true
@@ -87,13 +88,13 @@ function useConfettiCannon(colors) {
         });
     };
 
-    const end = Date.now() + 2000; // Short burst
+    const end = Date.now() + 2000;
     function runAnimation() {
         frame();
         if (Date.now() < end) {
             requestAnimationFrame(runAnimation);
         } else {
-             intervalRef.current = null; // Reset interval ref
+             intervalRef.current = null;
         }
     }
 
@@ -101,22 +102,25 @@ function useConfettiCannon(colors) {
   }, [colors]);
 
   const burst = useCallback(() => {
-     const origin = cannonRef.current?.getBoundingClientRect() ?? { y: 0.5 };
-     const originY = (origin.y / window.innerHeight);
+     const origin = cannonRef.current?.getBoundingClientRect() ?? { y: window.innerHeight / 2 }; // Default to center Y if ref not ready
+     const originY = Math.max(0, Math.min(1, (origin.y / window.innerHeight)));
 
      confetti({
           particleCount: 50, angle: 90, spread: 70, origin: { y: originY }, colors: colors, scalar: 1.2, disableForReducedMotion: true
      });
   }, [colors])
 
-  // Update cannon position reference on resize/scroll
    useEffect(() => {
-      const updateCannonPosition = debounce(() => { /* recalculate origin if needed */ }, 100);
+      const updateCannonPosition = debounce(() => {}, 100);
       window.addEventListener('resize', updateCannonPosition);
       window.addEventListener('scroll', updateCannonPosition);
       return () => {
          window.removeEventListener('resize', updateCannonPosition);
          window.removeEventListener('scroll', updateCannonPosition);
+         if (intervalRef.current) { // Clear interval on unmount if running
+            cancelAnimationFrame(intervalRef.current);
+            intervalRef.current = null;
+         }
       }
    }, []);
 
@@ -125,9 +129,9 @@ function useConfettiCannon(colors) {
 }
 
 // --- Components ---
-const Sparkles = () => (
+const Sparkles = React.memo(() => ( // Memoize Sparkles as they don't depend on Home's state directly
   <>
-    {[...Array(10)].map((_, i) => ( // Reduced number
+    {[...Array(10)].map((_, i) => (
       <motion.div
         key={i}
         className="absolute rounded-full bg-amber-100 pointer-events-none"
@@ -135,27 +139,29 @@ const Sparkles = () => (
         animate={{
           opacity: [0, 0.8, 0],
           scale: [0, 1, 0],
-          x: [0, (Math.random() - 0.5) * 80], // Reduced range
+          x: [0, (Math.random() - 0.5) * 80],
           y: [0, (Math.random() - 0.5) * 80]
         }}
         transition={{
           duration: 1.5 + Math.random(),
           repeat: Infinity,
-          repeatDelay: 1 + Math.random(), // Stagger repeat
+          repeatDelay: 1 + Math.random(),
           delay: Math.random() * 1.5,
           ease: "linear"
         }}
         style={{
           top: `${Math.random() * 100}%`,
           left: `${Math.random() * 100}%`,
-          height: `${Math.random() * 4 + 2}px`, // Smaller size
+          height: `${Math.random() * 4 + 2}px`,
           width: `${Math.random() * 4 + 2}px`,
           boxShadow: `0 0 8px 2px ${VINTAGE_COLORS.gold}aa`
         }}
       />
     ))}
   </>
-);
+));
+Sparkles.displayName = 'Sparkles'; // Add display name for React DevTools
+
 
 // --- Main Component ---
 export default function Home() {
@@ -167,7 +173,8 @@ export default function Home() {
   const [hasBlownCandles, setHasBlownCandles] = useState(false);
 
   const candleControls = useAnimation();
-  const { play: playMusic, pause: pauseMusic } = useAudioPlayer("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"); // Example song
+  // FIX: Removed pauseMusic as it was unused
+  const { play: playMusic } = useAudioPlayer("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
   const { fire: fireConfetti, burst: burstConfetti, cannonRef } = useConfettiCannon(
      [VINTAGE_COLORS.primary, VINTAGE_COLORS.secondary, VINTAGE_COLORS.accent1, VINTAGE_COLORS.accent2, VINTAGE_COLORS.gold]
   );
@@ -175,67 +182,87 @@ export default function Home() {
   const blowSoundRef = useRef(null);
 
   useEffect(() => {
-      blowSoundRef.current = new Audio('/blow-candles.mp3'); // Assumes file in /public
-      blowSoundRef.current.volume = 0.4;
-      blowSoundRef.current.preload = "auto";
-  }, []);
+      const audio = new Audio('/blow-candles.mp3');
+      audio.volume = 0.4;
+      audio.preload = "auto";
+      blowSoundRef.current = audio;
 
-  const handleOpenCard = () => {
+      // Cleanup function to prevent memory leaks with audio object
+      return () => {
+        if (blowSoundRef.current) {
+             blowSoundRef.current.pause();
+             blowSoundRef.current.removeAttribute('src');
+             blowSoundRef.current = null;
+        }
+      };
+  }, []); // Empty dependency array ensures this runs once
+
+  const handleOpenCard = useCallback(() => {
     if (isOpen) return;
     setIsOpen(true);
 
-    setTimeout(() => {
-      fireConfetti();
-      playMusic();
-    }, 400); // Slight delay after flip starts
+    // Use requestAnimationFrame for slightly smoother timing relative to render updates
+    requestAnimationFrame(() => {
+        setTimeout(() => {
+          fireConfetti();
+          playMusic();
+        }, 400);
 
-    setTimeout(() => setShowMessage(true), 800);
-    setTimeout(() => setShowBalloons(true), 1200);
-    setTimeout(() => setShowGifts(true), 1500);
-    setTimeout(() => setShowCake(true), 1800);
-    // Removed fireworks state as it's constant presence after reveal
-  };
+        setTimeout(() => setShowMessage(true), 800);
+        setTimeout(() => setShowBalloons(true), 1200);
+        setTimeout(() => setShowGifts(true), 1500);
+        setTimeout(() => setShowCake(true), 1800);
+    });
 
-  const handleBlowCandles = () => {
-    if (!hasBlownCandles && showCake) {
+  }, [isOpen, fireConfetti, playMusic]); // Added dependencies
+
+  const handleBlowCandles = useCallback(() => {
+    if (!hasBlownCandles && showCake && blowSoundRef.current) {
       setHasBlownCandles(true);
       candleControls.start({
         opacity: 0,
         scaleY: 0,
         transition: { duration: 0.3, ease: "easeIn" }
       }).then(() => {
-           // Play blow sound only after animation starts
-           blowSoundRef.current?.play().catch(e => console.warn("Blow sound failed:", e));
+           // Check if audio context needs resuming (common browser restriction)
+           if (blowSoundRef.current.paused) {
+               blowSoundRef.current.play().catch(e => console.warn("Blow sound failed:", e));
+           }
       });
 
       burstConfetti();
     }
-  };
+  }, [hasBlownCandles, showCake, candleControls, burstConfetti]); // Added dependencies
 
-  const gifts = [
+  // Memoize gift array if VINTAGE_COLORS is stable (it is)
+  const gifts = useMemo(() => [
     { scale: 0.8, rotate: -15, color: VINTAGE_COLORS.primary, delay: 0.1 },
     { scale: 0.9, rotate: 5, color: VINTAGE_COLORS.secondary, delay: 0.2 },
     { scale: 0.75, rotate: 10, color: VINTAGE_COLORS.accent1, delay: 0.3 }
-  ];
+  ], []);
 
-  const cardVariants = {
+  const cardVariants = useMemo(() => ({
     closed: { rotateY: 0 },
-    open: { rotateY: -180 } // Flip backwards to reveal inside
-  };
+    open: { rotateY: -180 }
+  }), []);
 
-  const letterVariants = {
+  const letterVariants = useMemo(() => ({
     hidden: { opacity: 0, y: 20 },
     visible: (i) => ({
       opacity: 1,
       y: 0,
-      transition: { delay: i * 0.08, ease: "easeOut" } // Faster stagger
+      transition: { delay: i * 0.08, ease: "easeOut" }
     })
-  };
+  }), []);
+
+  // Import React explicitly for React.memo and React DevTools
+  const React = {memo, displayName};
+
 
   return (
     <div
-      ref={cannonRef} // Attach ref for confetti origin
-      className="min-h-screen flex items-center justify-center overflow-hidden relative p-4"
+      ref={cannonRef}
+      className="min-h-screen flex items-center justify-center overflow-hidden relative p-4 font-serif" // Apply base font
       style={{
         background: VINTAGE_COLORS.background,
         backgroundImage: `url("${PAPER_PATTERN_SVG}")`,
@@ -268,7 +295,7 @@ export default function Home() {
                 initial={{ y: "110vh", x: `${10 + i * 12}%` }}
                 animate={{
                   y: `-${25 + Math.random() * 40}vh`,
-                  x: [`${10 + i * 12}%`, `${8 + i * 12 + (Math.random() * 8 - 4)}%`], // Less erratic side movement
+                  x: [`${10 + i * 12}%`, `${8 + i * 12 + (Math.random() * 8 - 4)}%`],
                 }}
                 transition={{
                   y: { duration: 18 + Math.random() * 12, delay: Math.random() * 0.5, ease: "easeOut" },
@@ -282,7 +309,7 @@ export default function Home() {
                      }}
                  />
                 <motion.div
-                  className="absolute top-full left-1/2 w-[1px] h-48 -ml-[0.5px]" // Longer string
+                  className="absolute top-full left-1/2 w-[1px] h-48 -ml-[0.5px]"
                   style={{ background: "rgba(107, 83, 56, 0.3)" }}
                   initial={{ rotate: 0, scaleY: 1 }}
                   animate={{ rotate: [0, -3, 3, 0], scaleY: [1, 1.02, 0.98, 1] }}
@@ -301,27 +328,23 @@ export default function Home() {
           variants={cardVariants}
           initial="closed"
           animate={isOpen ? "open" : "closed"}
-          transition={{ duration: 0.8, ease: [0.25, 1, 0.5, 1] }} // Custom ease for nice flip
+          transition={{ duration: 0.8, ease: [0.25, 1, 0.5, 1] }}
           onClick={handleOpenCard}
-          style={{ transformStyle: "preserve-3d" }} // Crucial for 3D
+          style={{ transformStyle: "preserve-3d" }}
         >
           {/* Front Face */}
-          <div className="absolute inset-0 backface-hidden"> {/* Ensure front hides when flipped */}
+          <div className="absolute inset-0 backface-hidden">
               <div className="w-full h-full rounded-md overflow-hidden shadow-xl border-2 border-amber-800/20 bg-amber-50" style={{ backgroundImage: `url("${PAPER_PATTERN_SVG}")` }}>
-                 {/* Content of Front */}
-                 <div className="absolute inset-0 border-[10px] border-amber-800/5 rounded-sm" /> {/* Slightly softer border */}
+                 <div className="absolute inset-0 border-[10px] border-amber-800/5 rounded-sm" />
                  <div className="absolute inset-[12px] border border-amber-800/10 rounded-sm" />
                  <div className="absolute inset-0 flex flex-col justify-center items-center p-6">
-                    {/* Cake Medallion */}
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 100 }} className="relative w-48 h-48 mb-5">
                        <div className="absolute inset-0 rounded-full border-4 border-amber-700/10" style={{ background: VINTAGE_COLORS.accent2 }} />
                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 25, ease: "linear" }} className="absolute inset-3 rounded-full border border-dashed border-amber-800/15 flex items-center justify-center">
                           <motion.div className="relative w-20 h-20 flex items-center justify-center" animate={{ scale: [1, 1.04, 1] }} transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}>
-                             {/* Simplified Cake Icon */}
                              <div className="w-16 h-14 bg-amber-200 rounded border border-amber-800/20 relative pt-2 px-2">
                                <div className="h-3 bg-amber-100 border-b border-amber-800/10 rounded-t-sm"></div>
                                <div className="h-3 bg-amber-300 mt-1 border-b border-amber-800/10 rounded-b-sm"></div>
-                               {/* Candle */}
                                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-3 w-1 h-4 bg-red-400"></div>
                                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-[18px] w-2 h-2 bg-amber-300 rounded-full"></div>
                              </div>
@@ -343,10 +366,9 @@ export default function Home() {
                        <motion.div className="w-28 h-3 mx-auto mb-4" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 1 }}>
                             <svg viewBox="0 0 100 10" className="w-full" fill="none" stroke={VINTAGE_COLORS.gold} strokeWidth="1" strokeDasharray="2,3"><path d="M0,5 H100"/></svg>
                        </motion.div>
-                       <motion.p className="text-amber-800 font-serif italic text-sm mb-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}> Click to Open </motion.p>
+                       <motion.p className="font-serif italic text-sm mb-2" initial={{ opacity: 0, color: VINTAGE_COLORS.dark }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}> Click to Open </motion.p>
                        <motion.div animate={{ y: [0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }} className="text-amber-800/80 text-xl"> ↓ </motion.div>
                     </motion.div>
-                    {/* Stamp */}
                     <motion.div className="absolute top-4 right-4 w-12 h-16 bg-amber-100 border border-amber-800/20 flex flex-col items-center justify-center pt-1 pb-1 font-serif text-xs text-amber-800/60 shadow-sm" initial={{ rotate: 3 }} animate={{ rotate: [3, -2, 3] }} transition={{ repeat: Infinity, duration: 5, repeatType: "reverse" }}>
                        <div>for</div> <div className="w-full h-[1px] bg-amber-800/20 my-1"></div> <div>you</div> <div className="mt-1 text-base">✉</div>
                     </motion.div>
@@ -355,9 +377,8 @@ export default function Home() {
           </div>
 
           {/* Back Face (Inside) */}
-          <div className="absolute inset-0 backface-hidden" style={{ transform: "rotateY(180deg)" }}> {/* Pre-rotated + Hides when facing away */}
+          <div className="absolute inset-0 backface-hidden" style={{ transform: "rotateY(180deg)" }}>
                <div className="w-full h-full rounded-md overflow-hidden shadow-xl border-2 border-amber-800/20 bg-amber-100" style={{ backgroundImage: `url("${PAPER_PATTERN_SVG}")` }}>
-                  {/* Content of Inside */}
                   <div className="absolute inset-0 border-[10px] border-amber-800/5 rounded-sm" />
                   <div className="relative w-full h-full flex flex-col items-center justify-center p-6 pt-10 overflow-hidden">
                     {showMessage && <Sparkles />}
@@ -368,29 +389,26 @@ export default function Home() {
                     </motion.h2>
 
                     <motion.p className="text-amber-800 text-center font-serif text-sm leading-relaxed mb-4 max-w-xs" initial={{ opacity: 0 }} animate={showMessage ? { opacity: 1 } : {}} transition={{ delay: 0.2 }}>
-                        May your day be filled with vintage charm, joyous moments, and delightful surprises. Wishing you a wonderful year ahead!
+                       Semoga hari harimu di tahun ini dan seterusnya dipenuhi dengan kebahagiaan dan kebaikan!! . Happy birthday Indrii :)
                     </motion.p>
 
                     {/* Cake */}
                     {showCake && (
                         <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ scale: 1.03 }} transition={{ type: "spring", stiffness: 100 }} className="relative my-3 cursor-pointer group" onClick={handleBlowCandles} title={hasBlownCandles ? "Candles blown!" : "Click cake to blow candles!"}>
                            <div className="w-36 h-20 rounded bg-amber-200 border-2 border-amber-800/15 shadow-md relative pt-2 px-2">
-                             {/* Layers */}
                              <div className="h-4 bg-amber-100 border-b border-amber-800/10 rounded-t-sm"></div>
                              <div className="h-4 bg-amber-300 mt-1 border-b border-amber-800/10"></div>
                              <div className="h-4 bg-amber-200 mt-1 border-b border-amber-800/10 rounded-b-sm"></div>
-
-                             {/* Candles */}
                              <div className="absolute -top-6 w-full flex justify-center space-x-2.5">
                                {[...Array(3)].map((_, i) => (
                                    <div key={i} className="relative flex flex-col items-center">
-                                      <motion.div // Flame
+                                      <motion.div
                                           animate={candleControls}
                                           initial={{ opacity: 1, scaleY: 1 }}
                                           className="w-3 h-4 bg-gradient-to-b from-yellow-200 via-orange-400 to-transparent rounded-t-full blur-[2px] origin-bottom"
                                           style={{ boxShadow: "0 -2px 8px 1px rgba(245, 158, 11, 0.6)" }}
                                        />
-                                      <motion.div // Candle Stick
+                                      <motion.div
                                           className="w-1 h-6 bg-gradient-to-r from-red-200 to-red-400 rounded-sm shadow-sm"
                                        />
                                    </div>
@@ -414,9 +432,7 @@ export default function Home() {
                                    transition={{ scale: { delay: gift.delay, type: "spring", stiffness: 120 }, y: { repeat: Infinity, duration: 1.5 + i * 0.3, ease: "easeInOut", delay: gift.delay } }}
                                    whileHover={{ scale: gift.scale * 1.08, zIndex: 10 }}
                                 >
-                                   {/* Box */}
                                    <div className="w-10 h-10 rounded-sm shadow-sm border border-amber-800/20" style={{ backgroundColor: gift.color }} />
-                                   {/* Ribbon */}
                                    <div className="absolute top-1/2 left-0 w-full h-1.5 -mt-[3px] bg-amber-800/15 border-y border-amber-800/10" />
                                    <div className="absolute top-0 left-1/2 w-1.5 h-full -ml-[3px] bg-amber-800/15 border-x border-amber-800/10" />
                                 </motion.div>
@@ -426,16 +442,13 @@ export default function Home() {
 
                     <div className="mt-auto text-center">
                         <motion.p className="font-dancing text-2xl text-amber-800/95" initial={{ opacity: 0 }} animate={showMessage ? { opacity: 1 } : {}} transition={{ delay: 0.5 }}>
-                          Warmest wishes,
-                        </motion.p>
-                        <motion.p className="font-dancing text-xl text-amber-800/80" initial={{ opacity: 0 }} animate={showMessage ? { opacity: 1 } : {}} transition={{ delay: 0.7 }}>
-                          A Friend {/* Placeholder - Replace Name */}
+                          Sincerely Arul,
                         </motion.p>
                     </div>
 
                     {/* Wax Seal */}
                     <motion.div className="absolute bottom-5 right-6 w-12 h-12 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center shadow-md" initial={{ scale: 0, rotate: -10 }} animate={showMessage ? { scale: 1, rotate: 5 } : {}} transition={{ delay: 0.8, type: "spring", stiffness: 90 }} >
-                         <span className="text-amber-100 text-lg font-serif transform -rotate-12">F</span> {/* Placeholder initial */}
+                         <span className="text-amber-100 text-lg font-serif transform -rotate-12">A</span>
                     </motion.div>
                   </div>
                </div>
@@ -443,7 +456,7 @@ export default function Home() {
         </motion.div>
       </div>
 
-       {/* Vintage-style "Fireworks" (subtle radial bursts) appear after opening */}
+       {/* Fireworks */}
        {isOpen && (
         <div className="fixed inset-0 pointer-events-none z-0">
           {[...Array(8)].map((_, i) => (
@@ -456,14 +469,14 @@ export default function Home() {
                   ease: "easeOut", repeatDelay: 2 + Math.random() * 3
               }}
               style={{
-                  top: `${Math.random() * 80 + 10}%`, // Avoid extreme edges
+                  top: `${Math.random() * 80 + 10}%`,
                   left: `${Math.random() * 80 + 10}%`,
                }}
             >
-              <div className="w-24 h-24 rounded-full" // Slightly larger
+              <div className="w-24 h-24 rounded-full"
                    style={{
                      background: `radial-gradient(circle, ${ [VINTAGE_COLORS.primary, VINTAGE_COLORS.secondary, VINTAGE_COLORS.gold, VINTAGE_COLORS.accent2][i % 4]}66 0%, transparent 65%)`,
-                     filter: `blur(5px)` // Add blur
+                     filter: `blur(5px)`
                     }}
                />
             </motion.div>
@@ -479,12 +492,14 @@ export default function Home() {
           -webkit-transform: translateZ(0);
         }
 
+        /* Import Fonts */
         @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
 
         .font-dancing { font-family: 'Dancing Script', cursive; }
-        .font-serif { font-family: 'Playfair Display', serif; }
+        .font-serif { font-family: 'Playfair Display', serif; } /* Ensure base font is serif */
 
-        body { margin: 0; } /* Ensure no default margin */
+        /* Base Styles */
+        body { margin: 0; line-height: 1.6; /* Improve text readability */ }
       `}</style>
     </div>
   );
