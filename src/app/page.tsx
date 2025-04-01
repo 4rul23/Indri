@@ -1,39 +1,50 @@
 /* eslint-disable */
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo} from "react";
-import { motion, AnimatePresence, useAnimation } from "framer-motion";
+// Import React explicitly, especially for hooks and types
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
+import { motion, AnimatePresence, useAnimation, AnimationControls } from "framer-motion";
+// Assuming types are not available or needed for confetti library
+// If types were available: import confetti from 'canvas-confetti';
+declare var confetti: any; // Declare confetti as any if types aren't installed/available
 
-// Debounce utility for resizing confetti cannon
-function debounce(func, wait) {
-  let timeout;
-  return function executedFunction(...args) {
+// Debounce utility with improved typing
+function debounce<T extends (...args: any[]) => void>(func: T, wait: number): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null;
+  return function executedFunction(...args: Parameters<T>): void {
     const later = () => {
-      clearTimeout(timeout);
+      timeout = null; // Clear timeout ID *before* executing func
       func(...args);
     };
-    clearTimeout(timeout);
+    if (timeout) {
+      clearTimeout(timeout);
+    }
     timeout = setTimeout(later, wait);
   };
 }
 
 // --- Constants ---
 const VINTAGE_COLORS = {
-  primary: "#A45A52", // vintage red
-  secondary: "#91785D", // vintage brown
-  accent1: "#D8C9B9", // cream
-  accent2: "#E8D8C4", // light cream
-  dark: "#4A3C2A", // dark brown
-  gold: "#BF9B6F", // antique gold
-  background: "#F2EBE0", // light paper
-  paperPatternFill: '#d1bfa3' // Pattern color
+  primary: "#A45A52",
+  secondary: "#91785D",
+  accent1: "#D8C9B9",
+  accent2: "#E8D8C4",
+  dark: "#4A3C2A",
+  gold: "#BF9B6F",
+  background: "#F2EBE0",
+  paperPatternFill: '#d1bfa3'
 };
 
 const PAPER_PATTERN_SVG = `data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='${VINTAGE_COLORS.paperPatternFill}' fill-opacity='0.1' fill-rule='evenodd'/%3E%3C/svg%3E`;
 
 // --- Hooks ---
-function useAudioPlayer(src) {
-  const audioRef = useRef(null);
+interface UseAudioPlayerReturn {
+  play: () => void;
+  // pause: () => void; // Kept internal to the hook if not exported
+}
+
+function useAudioPlayer(src: string): UseAudioPlayerReturn {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const audio = new Audio(src);
@@ -47,38 +58,52 @@ function useAudioPlayer(src) {
         audioRef.current.pause();
         audioRef.current.removeAttribute('src');
         audioRef.current.load();
+        audioRef.current = null; // Explicitly nullify
       }
     };
   }, [src]);
 
   const play = useCallback(() => {
     if (audioRef.current && audioRef.current.paused) {
-       audioRef.current.play().catch(e => console.warn("Audio play failed:", e));
+       // Attempt to resume AudioContext if needed (for some browsers)
+       try {
+           audioRef.current.play().catch(e => console.warn("Audio play failed:", e));
+       } catch (error) {
+            console.warn("Audio play failed potentially due to AudioContext suspension:", error)
+       }
     }
   }, []);
 
-  // We keep the pause function here in the hook in case it's needed later
-  const pause = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-  }, []);
+  // Internal pause function (optional to keep)
+  // const pause = useCallback(() => {
+  //   if (audioRef.current) {
+  //     audioRef.current.pause();
+  //   }
+  // }, []);
 
-  // Only return what's currently used by the Home component
   return { play };
 }
 
+interface UseConfettiCannonReturn {
+    fire: () => void;
+    burst: () => void;
+    cannonRef: React.RefObject<HTMLDivElement>; // Ref type for div
+}
 
-function useConfettiCannon(colors) {
-  const intervalRef = useRef(null);
-  const cannonRef = useRef();
+function useConfettiCannon(colors: string[]): UseConfettiCannonReturn {
+  const animationFrameRef = useRef<number | null>(null); // Store animation frame ID
+  const cannonRef = useRef<HTMLDivElement>(null); // Correct type for div ref
 
   const fire = useCallback(() => {
-    if (intervalRef.current) return;
+    if (animationFrameRef.current) return; // Prevent multiple concurrent animations
 
     const frame = () => {
-        const origin = cannonRef.current?.getBoundingClientRect() ?? { y: 0 };
-        const originY = Math.max(0, Math.min(1, (origin.y / window.innerHeight))); // Ensure originY is between 0 and 1
+        const node = cannonRef.current;
+        let originY = 0.5; // Default to center if node not available
+        if (node) {
+            const rect = node.getBoundingClientRect();
+            originY = Math.max(0, Math.min(1, (rect.top + rect.height / 2) / window.innerHeight)); // Center Y relative to viewport
+        }
 
         confetti({
             particleCount: 2, angle: 60, spread: 55, origin: { x: 0, y: originY }, colors: colors, disableForReducedMotion: true
@@ -89,21 +114,25 @@ function useConfettiCannon(colors) {
     };
 
     const end = Date.now() + 2000;
-    function runAnimation() {
+    const runAnimation = () => {
         frame();
         if (Date.now() < end) {
-            requestAnimationFrame(runAnimation);
+            animationFrameRef.current = requestAnimationFrame(runAnimation);
         } else {
-             intervalRef.current = null;
+             animationFrameRef.current = null;
         }
     }
 
-    requestAnimationFrame(runAnimation);
+    animationFrameRef.current = requestAnimationFrame(runAnimation);
   }, [colors]);
 
   const burst = useCallback(() => {
-     const origin = cannonRef.current?.getBoundingClientRect() ?? { y: window.innerHeight / 2 }; // Default to center Y if ref not ready
-     const originY = Math.max(0, Math.min(1, (origin.y / window.innerHeight)));
+     const node = cannonRef.current;
+     let originY = 0.5;
+     if (node) {
+         const rect = node.getBoundingClientRect();
+         originY = Math.max(0, Math.min(1, (rect.top + rect.height / 2) / window.innerHeight));
+     }
 
      confetti({
           particleCount: 50, angle: 90, spread: 70, origin: { y: originY }, colors: colors, scalar: 1.2, disableForReducedMotion: true
@@ -111,15 +140,15 @@ function useConfettiCannon(colors) {
   }, [colors])
 
    useEffect(() => {
-      const updateCannonPosition = debounce(() => {}, 100);
-      window.addEventListener('resize', updateCannonPosition);
-      window.addEventListener('scroll', updateCannonPosition);
+      // Basic resize listener setup (no-op for now, but pattern is here)
+      const handleResize = debounce(() => { /* Potential logic for resize if needed */ }, 100);
+      window.addEventListener('resize', handleResize);
+
       return () => {
-         window.removeEventListener('resize', updateCannonPosition);
-         window.removeEventListener('scroll', updateCannonPosition);
-         if (intervalRef.current) { // Clear interval on unmount if running
-            cancelAnimationFrame(intervalRef.current);
-            intervalRef.current = null;
+         window.removeEventListener('resize', handleResize);
+         if (animationFrameRef.current) { // Clear animation frame on unmount
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
          }
       }
    }, []);
@@ -129,12 +158,12 @@ function useConfettiCannon(colors) {
 }
 
 // --- Components ---
-const Sparkles = React.memo(() => ( // Memoize Sparkles as they don't depend on Home's state directly
+const Sparkles = memo(() => (
   <>
     {[...Array(10)].map((_, i) => (
       <motion.div
         key={i}
-        className="absolute rounded-full bg-amber-100 pointer-events-none"
+        className="absolute rounded-full bg-amber-100 pointer-events-none z-20" // Ensure sparkles are above most content
         initial={{ opacity: 0, scale: 0 }}
         animate={{
           opacity: [0, 0.8, 0],
@@ -160,26 +189,25 @@ const Sparkles = React.memo(() => ( // Memoize Sparkles as they don't depend on 
     ))}
   </>
 ));
-Sparkles.displayName = 'Sparkles'; // Add display name for React DevTools
+Sparkles.displayName = 'Sparkles';
 
 
 // --- Main Component ---
 export default function Home() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [showMessage, setShowMessage] = useState(false);
-  const [showBalloons, setShowBalloons] = useState(false);
-  const [showGifts, setShowGifts] = useState(false);
-  const [showCake, setShowCake] = useState(false);
-  const [hasBlownCandles, setHasBlownCandles] = useState(false);
+  const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [showMessage, setShowMessage] = useState<boolean>(false);
+  const [showBalloons, setShowBalloons] = useState<boolean>(false);
+  const [showGifts, setShowGifts] = useState<boolean>(false);
+  const [showCake, setShowCake] = useState<boolean>(false);
+  const [hasBlownCandles, setHasBlownCandles] = useState<boolean>(false);
 
-  const candleControls = useAnimation();
-  // FIX: Removed pauseMusic as it was unused
+  const candleControls: AnimationControls = useAnimation();
   const { play: playMusic } = useAudioPlayer("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
   const { fire: fireConfetti, burst: burstConfetti, cannonRef } = useConfettiCannon(
-     [VINTAGE_COLORS.primary, VINTAGE_COLORS.secondary, VINTAGE_COLORS.accent1, VINTAGE_COLORS.accent2, VINTAGE_COLORS.gold]
+     Object.values(VINTAGE_COLORS).filter(color => color !== VINTAGE_COLORS.background && color !== VINTAGE_COLORS.paperPatternFill && color !== VINTAGE_COLORS.dark) // Dynamically get confetti colors
   );
 
-  const blowSoundRef = useRef(null);
+  const blowSoundRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
       const audio = new Audio('/blow-candles.mp3');
@@ -187,34 +215,31 @@ export default function Home() {
       audio.preload = "auto";
       blowSoundRef.current = audio;
 
-      // Cleanup function to prevent memory leaks with audio object
       return () => {
         if (blowSoundRef.current) {
              blowSoundRef.current.pause();
              blowSoundRef.current.removeAttribute('src');
-             blowSoundRef.current = null;
+             blowSoundRef.current = null; // Clear ref on unmount
         }
       };
-  }, []); // Empty dependency array ensures this runs once
+  }, []);
 
   const handleOpenCard = useCallback(() => {
     if (isOpen) return;
     setIsOpen(true);
 
-    // Use requestAnimationFrame for slightly smoother timing relative to render updates
-    requestAnimationFrame(() => {
-        setTimeout(() => {
-          fireConfetti();
-          playMusic();
-        }, 400);
+    // Using timeout directly is fine here
+    setTimeout(() => {
+        fireConfetti();
+        playMusic();
+    }, 400);
 
-        setTimeout(() => setShowMessage(true), 800);
-        setTimeout(() => setShowBalloons(true), 1200);
-        setTimeout(() => setShowGifts(true), 1500);
-        setTimeout(() => setShowCake(true), 1800);
-    });
+    setTimeout(() => setShowMessage(true), 800);
+    setTimeout(() => setShowBalloons(true), 1200);
+    setTimeout(() => setShowGifts(true), 1500);
+    setTimeout(() => setShowCake(true), 1800);
 
-  }, [isOpen, fireConfetti, playMusic]); // Added dependencies
+  }, [isOpen, fireConfetti, playMusic]);
 
   const handleBlowCandles = useCallback(() => {
     if (!hasBlownCandles && showCake && blowSoundRef.current) {
@@ -224,22 +249,19 @@ export default function Home() {
         scaleY: 0,
         transition: { duration: 0.3, ease: "easeIn" }
       }).then(() => {
-           // Check if audio context needs resuming (common browser restriction)
-           if (blowSoundRef.current.paused) {
-               blowSoundRef.current.play().catch(e => console.warn("Blow sound failed:", e));
-           }
+            blowSoundRef.current?.play().catch(e => console.warn("Blow sound failed:", e));
       });
 
       burstConfetti();
     }
-  }, [hasBlownCandles, showCake, candleControls, burstConfetti]); // Added dependencies
+  }, [hasBlownCandles, showCake, candleControls, burstConfetti]);
 
-  // Memoize gift array if VINTAGE_COLORS is stable (it is)
+  // Memoize constant data structures
   const gifts = useMemo(() => [
     { scale: 0.8, rotate: -15, color: VINTAGE_COLORS.primary, delay: 0.1 },
     { scale: 0.9, rotate: 5, color: VINTAGE_COLORS.secondary, delay: 0.2 },
     { scale: 0.75, rotate: 10, color: VINTAGE_COLORS.accent1, delay: 0.3 }
-  ], []);
+  ], []); // Empty array: VINTAGE_COLORS object won't change
 
   const cardVariants = useMemo(() => ({
     closed: { rotateY: 0 },
@@ -248,27 +270,24 @@ export default function Home() {
 
   const letterVariants = useMemo(() => ({
     hidden: { opacity: 0, y: 20 },
-    visible: (i) => ({
+    visible: (i: number) => ({ // Add type for index 'i'
       opacity: 1,
       y: 0,
       transition: { delay: i * 0.08, ease: "easeOut" }
     })
   }), []);
 
-  // Import React explicitly for React.memo and React DevTools
-  const React = {memo, displayName};
-
 
   return (
     <div
       ref={cannonRef}
-      className="min-h-screen flex items-center justify-center overflow-hidden relative p-4 font-serif" // Apply base font
+      className="min-h-screen flex items-center justify-center overflow-hidden relative p-4 font-serif"
       style={{
         background: VINTAGE_COLORS.background,
         backgroundImage: `url("${PAPER_PATTERN_SVG}")`,
       }}
     >
-      {/* Background Subtle Blurs */}
+      {/* Background Blurs */}
       <div className="absolute inset-0 opacity-10 z-0 pointer-events-none">
         {[...Array(6)].map((_, i) => (
           <motion.div
@@ -338,6 +357,7 @@ export default function Home() {
                  <div className="absolute inset-0 border-[10px] border-amber-800/5 rounded-sm" />
                  <div className="absolute inset-[12px] border border-amber-800/10 rounded-sm" />
                  <div className="absolute inset-0 flex flex-col justify-center items-center p-6">
+                    {/* Cake Medallion - Ensure content doesn't cause type errors */}
                     <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2, type: "spring", stiffness: 100 }} className="relative w-48 h-48 mb-5">
                        <div className="absolute inset-0 rounded-full border-4 border-amber-700/10" style={{ background: VINTAGE_COLORS.accent2 }} />
                        <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 25, ease: "linear" }} className="absolute inset-3 rounded-full border border-dashed border-amber-800/15 flex items-center justify-center">
@@ -356,8 +376,9 @@ export default function Home() {
                        <motion.div className="w-36 h-3 mx-auto mb-3" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.4 }}>
                            <svg viewBox="0 0 100 10" className="w-full" fill="none" stroke={VINTAGE_COLORS.gold} strokeWidth="1"> <path d="M0,5 Q25,0 50,5 T100,5"/><path d="M0,5 Q25,10 50,5 T100,5"/> </svg>
                        </motion.div>
+                       {/* Ensure map index is typed for letterVariants */}
                        <div className="flex justify-center mb-2 overflow-hidden">
-                           {Array.from("Happy Birthday!").map((letter, i) => (
+                           {Array.from("Happy Birthday!").map((letter, i: number) => (
                              <motion.span key={i} custom={i} variants={letterVariants} initial="hidden" animate="visible" className="font-serif font-bold text-3xl text-amber-900/90 inline-block">
                                  {letter === " " ? "\u00A0" : letter}
                              </motion.span>
@@ -369,6 +390,7 @@ export default function Home() {
                        <motion.p className="font-serif italic text-sm mb-2" initial={{ opacity: 0, color: VINTAGE_COLORS.dark }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}> Click to Open </motion.p>
                        <motion.div animate={{ y: [0, 3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }} className="text-amber-800/80 text-xl"> ↓ </motion.div>
                     </motion.div>
+                    {/* Ensure Stamp content is valid JSX */}
                     <motion.div className="absolute top-4 right-4 w-12 h-16 bg-amber-100 border border-amber-800/20 flex flex-col items-center justify-center pt-1 pb-1 font-serif text-xs text-amber-800/60 shadow-sm" initial={{ rotate: 3 }} animate={{ rotate: [3, -2, 3] }} transition={{ repeat: Infinity, duration: 5, repeatType: "reverse" }}>
                        <div>for</div> <div className="w-full h-[1px] bg-amber-800/20 my-1"></div> <div>you</div> <div className="mt-1 text-base">✉</div>
                     </motion.div>
@@ -399,8 +421,9 @@ export default function Home() {
                              <div className="h-4 bg-amber-100 border-b border-amber-800/10 rounded-t-sm"></div>
                              <div className="h-4 bg-amber-300 mt-1 border-b border-amber-800/10"></div>
                              <div className="h-4 bg-amber-200 mt-1 border-b border-amber-800/10 rounded-b-sm"></div>
+                             {/* Candles - Ensure map index 'i' has type */}
                              <div className="absolute -top-6 w-full flex justify-center space-x-2.5">
-                               {[...Array(3)].map((_, i) => (
+                               {[...Array(3)].map((_, i: number) => (
                                    <div key={i} className="relative flex flex-col items-center">
                                       <motion.div
                                           animate={candleControls}
@@ -424,7 +447,8 @@ export default function Home() {
                     {/* Gifts */}
                     {showGifts && (
                        <div className="flex justify-center space-x-3 mt-2 mb-4">
-                           {gifts.map((gift, i) => (
+                           {/* Ensure gift index 'i' is typed */}
+                           {gifts.map((gift, i: number) => (
                                <motion.div
                                    key={i} className="relative"
                                    initial={{ scale: 0, y: 20 }}
@@ -444,6 +468,9 @@ export default function Home() {
                         <motion.p className="font-dancing text-2xl text-amber-800/95" initial={{ opacity: 0 }} animate={showMessage ? { opacity: 1 } : {}} transition={{ delay: 0.5 }}>
                           Sincerely Arul,
                         </motion.p>
+                        {/* <motion.p className="font-dancing text-xl text-amber-800/80" initial={{ opacity: 0 }} animate={showMessage ? { opacity: 1 } : {}} transition={{ delay: 0.7 }}>
+                          A Friend // Commented out placeholder if not needed
+                        </motion.p> */}
                     </div>
 
                     {/* Wax Seal */}
@@ -459,7 +486,7 @@ export default function Home() {
        {/* Fireworks */}
        {isOpen && (
         <div className="fixed inset-0 pointer-events-none z-0">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(8)].map((_, i: number) => ( // Add type for index 'i'
             <motion.div
               key={`firework-${i}`} className="absolute"
               initial={{ opacity: 0, scale: 0 }}
@@ -488,18 +515,13 @@ export default function Home() {
         .backface-hidden {
           backface-visibility: hidden;
           -webkit-backface-visibility: hidden; /* Safari */
-          transform: translateZ(0); /* Promote to layer, might help rendering */
+          transform: translateZ(0);
           -webkit-transform: translateZ(0);
         }
-
-        /* Import Fonts */
         @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
-
         .font-dancing { font-family: 'Dancing Script', cursive; }
-        .font-serif { font-family: 'Playfair Display', serif; } /* Ensure base font is serif */
-
-        /* Base Styles */
-        body { margin: 0; line-height: 1.6; /* Improve text readability */ }
+        .font-serif { font-family: 'Playfair Display', serif; }
+        body { margin: 0; line-height: 1.6; }
       `}</style>
     </div>
   );
